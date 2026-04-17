@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTC Live Tracking</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h2>DTC Live Tracking</h2>
+            <ul>
+                <li><button onclick="window.location.href='/'">Back to Dashboard</button></li>
+            </ul>
+        </div>
+        <div class="main-content">
+            <h1>Live Bus Tracking</h1>
+            <div id="map" style="height: 400px; width: 100%; margin-bottom: 20px;"></div>
+            <div id="bus-list" class="bus-tracking">
+                <h4>Live Bus Locations</h4>
+                <div class="bus-list" id="bus-container">
+                    <p>Loading bus locations...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script>
+        // Initialize map with enhanced features
+        var map = L.map('map').setView([28.6139, 77.2090], 11);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18
+        }).addTo(map);
+
+        var busMarkers = [];
+        var mainPointMarkers = [];
+        var busRoutes = [];
+        var selectedBus = null;
+
+        // Custom bus icon
+        var busIcon = L.divIcon({
+            html: '<div style="background: #ff6700; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px;">🚌</div>',
+            iconSize: [30, 30],
+            className: 'bus-marker'
+        });
+
+        // Main point icon
+        var mainPointIcon = L.divIcon({
+            html: '<div style="background: #002147; color: white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px;">🏢️</div>',
+            iconSize: [40, 40],
+            className: 'main-point-marker'
+        });
+
+        async function loadBusTracking() {
+            try {
+                // Load both bus locations and main points
+                const [busResponse, mainPointsResponse] = await Promise.all([
+                    fetch('/api/bus-tracking'),
+                    fetch('/api/main-points')
+                ]);
+                
+                const buses = await busResponse.json();
+                const mainPoints = await mainPointsResponse.json();
+                
+                // Clear existing markers
+                busMarkers.forEach(marker => map.removeLayer(marker));
+                mainPointMarkers.forEach(marker => map.removeLayer(marker));
+                busMarkers = [];
+                mainPointMarkers = [];
+                
+                // Add main point markers
+                mainPoints.forEach((point, index) => {
+                    const marker = L.marker([point.lat, point.lng], { icon: mainPointIcon }).addTo(map);
+                    
+                    // Enhanced popup with detailed information
+                    const popupContent = `
+                        <div style="text-align: center; padding: 15px; min-width: 250px;">
+                            <h4 style="margin: 0 0 10px 0; color: #002147;">${point.name}</h4>
+                            <div style="text-align: left; margin-top: 10px;">
+                                <strong>Type:</strong> ${point.type}<br>
+                                <strong>Capacity:</strong> ${point.capacity}<br>
+                                <strong>Routes:</strong> ${point.routes.join(', ')}<br>
+                                <strong>Facilities:</strong><br>
+                                ${point.facilities.map(f => `<span style="background: #ff6700; color: white; padding: 2px 6px; margin: 2px; border-radius: 3px; font-size: 11px;">${f}</span>`).join(' ')}
+                            </div>
+                            <div style="margin-top: 10px;">
+                                <small style="color: #666;">${point.description}</small>
+                            </div>
+                            <div style="margin-top: 15px;">
+                                <button onclick="showRoutesFromPoint(${point.id})" style="padding: 8px 15px; background: #ff6700; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">View Routes</button>
+                                <button onclick="navigateToPoint(${point.lat}, ${point.lng})" style="padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">Navigate</button>
+                            </div>
+                        </div>
+                    `;
+                    marker.bindPopup(popupContent);
+                    
+                    // Add hover effect
+                    marker.on('mouseover', function() {
+                        this.setIcon(L.divIcon({
+                            html: '<div style="background: #ff6700; color: white; border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; box-shadow: 0 4px 8px rgba(255, 103, 0, 0.3);">🏢️</div>',
+                            iconSize: [45, 45],
+                            className: 'main-point-marker-hover'
+                        }));
+                    });
+                    
+                    marker.on('mouseout', function() {
+                        this.setIcon(mainPointIcon);
+                    });
+                    
+                    mainPointMarkers.push(marker);
+                });
+                
+                // Add bus markers with animations
+                buses.forEach((bus, index) => {
+                    const marker = L.marker([bus.lat, bus.lng], { icon: busIcon }).addTo(map);
+                    
+                    // Enhanced popup with more info
+                    const popupContent = `
+                        <div style="text-align: center; padding: 10px;">
+                            <strong>Bus ${bus.id}</strong><br>
+                            <small>Lat: ${bus.lat}, Lng: ${bus.lng}</small><br>
+                            <button onclick="trackBus(${bus.id})" style="margin-top: 5px; padding: 5px 10px; background: #ff6700; color: white; border: none; border-radius: 3px; cursor: pointer;">Track</button>
+                        </div>
+                    `;
+                    marker.bindPopup(popupContent);
+                    
+                    // Add animation to marker
+                    marker._icon.style.animation = `pulse ${2 + index * 0.2}s infinite`;
+                    
+                    busMarkers.push(marker);
+                });
+                
+                // Draw routes between buses and main points
+                drawConnections(buses, mainPoints);
+                
+                // Update bus list with interactions
+                updateBusList(buses);
+                
+            } catch (error) {
+                document.getElementById('bus-container').innerHTML = '<p>Error loading bus locations. Please try again.</p>';
+            }
+        }
+
+        function drawConnections(buses, mainPoints) {
+            // Clear existing routes
+            busRoutes.forEach(route => map.removeLayer(route));
+            busRoutes = [];
+            
+            // Draw lines from buses to nearest main points
+            buses.forEach(bus => {
+                let nearestPoint = null;
+                let minDistance = Infinity;
+                
+                mainPoints.forEach(point => {
+                    const distance = calculateDistance(bus, point);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestPoint = point;
+                    }
+                });
+                
+                if (nearestPoint && minDistance < 0.1) { // Only connect if within reasonable distance
+                    const connection = L.polyline([
+                        [bus.lat, bus.lng],
+                        [nearestPoint.lat, nearestPoint.lng]
+                    ], {
+                        color: '#28a745',
+                        weight: 3,
+                        opacity: 0.7,
+                        dashArray: '10, 5'
+                    }).addTo(map);
+                    busRoutes.push(connection);
+                }
+            });
+        }
+
+        function calculateDistance(bus1, bus2) {
+            const R = 6371; // Earth's radius in km
+            const dLat = (bus2.lat - bus1.lat) * Math.PI / 180;
+            const dLon = (bus2.lng - bus1.lng) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(bus1.lat * Math.PI / 180) * Math.cos(bus2.lat * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function updateBusList(buses) {
+            let content = '';
+            buses.forEach(bus => {
+                content += `
+                    <div class="bus-item" onclick="focusBus(${bus.lat}, ${bus.lng}, ${bus.id})">
+                        <strong>Bus ${bus.id}</strong><br>
+                        <small>Lat: ${bus.lat}, Lng: ${bus.lng}</small><br>
+                        <span class="bus-status">🟢 Active</span>
+                    </div>
+                `;
+            });
+            document.getElementById('bus-container').innerHTML = content;
+        }
+
+        function focusBus(lat, lng, busId) {
+            map.setView([lat, lng], 15, {
+                animate: true,
+                duration: 1
+            });
+            
+            // Find and open the bus marker popup
+            busMarkers.forEach(marker => {
+                if (marker.getPopup().getContent().includes(`Bus ${busId}`)) {
+                    marker.openPopup();
+                }
+            });
+        }
+
+        function showRoutesFromPoint(pointId) {
+            // This could open a modal or navigate to routes page filtered by this point
+            alert(`Showing routes from ${pointId}th main point. This would show all buses departing from this location.`);
+        }
+
+        function navigateToPoint(lat, lng) {
+            map.setView([lat, lng], 16, {
+                animate: true,
+                duration: 2
+            });
+        }
+
+        function trackBus(busId) {
+            selectedBus = busId;
+            // Add tracking indicator
+            const trackingInfo = document.createElement('div');
+            trackingInfo.id = 'tracking-info';
+            trackingInfo.innerHTML = `
+                <div style="position: fixed; top: 20px; right: 20px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000;">
+                    <strong>🚌 Tracking Bus ${busId}</strong><br>
+                    <small>Real-time updates every 10 seconds</small><br>
+                    <button onclick="stopTracking()" style="margin-top: 10px; padding: 5px 10px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">Stop</button>
+                </div>
+            `;
+            document.body.appendChild(trackingInfo);
+        }
+
+        function stopTracking() {
+            const trackingInfo = document.getElementById('tracking-info');
+            if (trackingInfo) {
+                trackingInfo.remove();
+            }
+            selectedBus = null;
+        }
+
+        // Add map controls
+        L.control.scale().addTo(map);
+        L.control.zoom().addTo(map);
+
+        // Add legend
+        const legend = L.control({position: 'bottomright'});
+        legend.onAdd = function(map) {
+            const div = L.DomUtil.create('div');
+            div.innerHTML = `
+                <div style="background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                    <h4 style="margin: 0 0 5px 0; color: #002147; font-size: 14px;">Legend</h4>
+                    <div style="font-size: 12px;">
+                        <div style="display: flex; align-items: center; margin: 3px 0;">
+                            <div style="background: #002147; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px;">🏢️</div>
+                            <span>Main Points</span>
+                        </div>
+                        <div style="display: flex; align-items: center; margin: 3px 0;">
+                            <div style="background: #ff6700; color: white; border-radius: 50%; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center; font-size: 8px;">🚌</div>
+                            <span>Active Buses</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            return div;
+        };
+        legend.addTo(map);
+
+        // Load bus tracking when page loads
+        loadBusTracking();
+        
+        // Refresh bus locations every 10 seconds
+        setInterval(loadBusTracking, 10000);
+
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                stopTracking();
+            }
+            if (e.ctrlKey && e.key === 'l') {
+                e.preventDefault();
+                // Toggle legend visibility
+                const legendDiv = document.querySelector('.leaflet-control');
+                if (legendDiv) {
+                    legendDiv.style.display = legendDiv.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

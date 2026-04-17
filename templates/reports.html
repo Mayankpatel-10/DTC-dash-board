@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTC Reports</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h2>DTC Reports</h2>
+            <ul>
+                <li><button onclick="window.location.href='/'">Back to Dashboard</button></li>
+            </ul>
+        </div>
+        <div class="main-content">
+            <h1>Reports & Analytics</h1>
+            <div id="reports-container" class="reports-container">
+                <p>Loading reports...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadReports() {
+            try {
+                const response = await fetch('/api/reports');
+                const reports = await response.json();
+                
+                let content = '';
+                
+                // Daily Summary
+                content += '<div class="report-section"><h4>Daily Summary</h4>';
+                content += `<p>Total Buses: ${reports.daily_summary.total_buses}</p>`;
+                content += `<p>Active Routes: ${reports.daily_summary.active_routes}</p>`;
+                content += `<p>Total Passengers: ${reports.daily_summary.total_passengers}</p>`;
+                content += `<p>On-Time Performance: ${reports.daily_summary.on_time_performance}</p>`;
+                content += '</div>';
+                
+                // Weekly Summary
+                content += '<div class="report-section"><h4>Weekly Summary</h4>';
+                content += `<p>Total Revenue: ${reports.weekly_summary.total_revenue}</p>`;
+                content += `<p>Average Delay: ${reports.weekly_summary.average_delay}</p>`;
+                content += `<p>Breakdowns: ${reports.weekly_summary.breakdowns}</p>`;
+                content += `<p>Complaints: ${reports.weekly_summary.complaints}</p>`;
+                content += '</div>';
+                
+                // Alerts
+                content += '<div class="report-section"><h4>Active Alerts</h4>';
+                reports.alerts.forEach(alert => {
+                    const alertClass = `alert-${alert.type}`;
+                    content += `<div class="alert ${alertClass}">${alert.message}</div>`;
+                });
+                content += '</div>';
+                
+                document.getElementById('reports-container').innerHTML = content;
+            } catch (error) {
+                document.getElementById('reports-container').innerHTML = '<p>Error loading reports. Please try again.</p>';
+            }
+        }
+
+        // Load reports when page loads
+        loadReports();
+        
+        // Refresh reports every 60 seconds
+        setInterval(loadReports, 60000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTC Schedules</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h2>DTC Schedules</h2>
+            <ul>
+                <li><button onclick="window.location.href='/'">Back to Dashboard</button></li>
+            </ul>
+        </div>
+        <div class="main-content">
+            <h1>Bus Schedules</h1>
+            <div id="schedules-container" class="data-table">
+                <p>Loading schedules...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadSchedules() {
+            try {
+                const response = await fetch('/api/schedules');
+                const schedules = await response.json();
+                
+                let content = '<table><tr><th>Route</th><th>Bus Number</th><th>Departure</th><th>Arrival</th><th>Status</th></tr>';
+                schedules.forEach(schedule => {
+                    const statusClass = schedule.status === 'On Time' ? 'status-on-time' : 'status-delayed';
+                    content += `<tr><td>${schedule.route}</td><td>${schedule.bus_number}</td><td>${schedule.departure}</td><td>${schedule.arrival}</td><td class="${statusClass}">${schedule.status}</td></tr>`;
+                });
+                content += '</table>';
+                
+                document.getElementById('schedules-container').innerHTML = content;
+            } catch (error) {
+                document.getElementById('schedules-container').innerHTML = '<p>Error loading schedules. Please try again.</p>';
+            }
+        }
+
+        // Load schedules when page loads
+        loadSchedules();
+        
+        // Refresh schedules every 30 seconds
+        setInterval(loadSchedules, 30000);
+    </script>
+</body>
+</html>

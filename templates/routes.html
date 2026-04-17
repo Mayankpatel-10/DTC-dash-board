@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTC Routes</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h2>DTC Routes</h2>
+            <ul>
+                <li><button onclick="window.location.href='/'">Back to Dashboard</button></li>
+            </ul>
+        </div>
+        <div class="main-content">
+            <h1>Bus Routes Information</h1>
+            <div id="routes-container" class="data-table">
+                <p>Loading routes...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSort = { column: null, direction: 'asc' };
+        let filteredRoutes = [];
+
+        async function loadRoutes() {
+            try {
+                const response = await fetch('/api/routes');
+                const routes = await response.json();
+                
+                // Store original data
+                window.allRoutes = routes;
+                filteredRoutes = routes;
+                
+                displayRoutes(routes);
+                setupFilters();
+                setupSorting();
+            } catch (error) {
+                document.getElementById('routes-container').innerHTML = '<p>Error loading routes. Please try again.</p>';
+            }
+        }
+
+        function displayRoutes(routes) {
+            let content = `
+                <div class="controls">
+                    <input type="text" id="searchInput" placeholder="Search routes..." onkeyup="filterRoutes()">
+                    <select id="statusFilter" onchange="filterRoutes()">
+                        <option value="">All Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                    <button onclick="exportData()">📥 Export</button>
+                </div>
+                <table id="routesTable">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable('name')">Route ${getSortIcon('name')}</th>
+                            <th onclick="sortTable('bus_number')">Bus Number ${getSortIcon('bus_number')}</th>
+                            <th onclick="sortTable('start')">Start Point ${getSortIcon('start')}</th>
+                            <th onclick="sortTable('end')">End Point ${getSortIcon('end')}</th>
+                            <th onclick="sortTable('distance')">Distance ${getSortIcon('distance')}</th>
+                            <th onclick="sortTable('stops')">Stops ${getSortIcon('stops')}</th>
+                            <th onclick="sortTable('status')">Status ${getSortIcon('status')}</th>
+                            <th onclick="sortTable('first_run')">First Run ${getSortIcon('first_run')}</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            routes.forEach((route, index) => {
+                const statusClass = route.status === 'Active' ? 'status-active' : 'status-inactive';
+                const colorDot = `<span style="display: inline-block; width: 12px; height: 12px; background: ${route.color}; border-radius: 50%; margin-right: 5px;"></span>`;
+                
+                content += `
+                    <tr class="route-row" data-index="${index}">
+                        <td>${colorDot}${route.name}</td>
+                        <td>${route.bus_number}</td>
+                        <td>${route.start}</td>
+                        <td>${route.end}</td>
+                        <td>${route.distance}</td>
+                        <td>${route.stops}</td>
+                        <td><span class="${statusClass}">${route.status}</span></td>
+                        <td>${route.first_run}</td>
+                        <td>
+                            <button onclick="viewRouteDetails(${index})" style="padding: 5px 10px; font-size: 12px;">View</button>
+                            <button onclick="editRoute(${index})" style="padding: 5px 10px; font-size: 12px; background: #28a745;">Edit</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            content += '</tbody></table>';
+            document.getElementById('routes-container').innerHTML = content;
+        }
+
+        function setupFilters() {
+            // Add filter styles
+            const style = document.createElement('style');
+            style.textContent = `
+                .controls { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+                .controls input, .controls select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+                .controls input { flex: 1; }
+                .status-active { color: #28a745; font-weight: bold; }
+                .status-inactive { color: #dc3545; font-weight: bold; }
+                .route-row { transition: all 0.3s ease; cursor: pointer; }
+                .route-row:hover { background-color: #f0f0f0; transform: scale(1.01); }
+                .route-row.highlight { background-color: #fff3cd; }
+                #routesTable { width: 100%; border-collapse: collapse; }
+                #routesTable th { background: #002147; color: white; padding: 12px; text-align: left; cursor: pointer; user-select: none; }
+                #routesTable th:hover { background: #003366; }
+                #routesTable td { padding: 12px; border-bottom: 1px solid #ddd; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function setupSorting() {
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'f') {
+                    e.preventDefault();
+                    document.getElementById('searchInput').focus();
+                }
+            });
+        }
+
+        function filterRoutes() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            
+            filteredRoutes = window.allRoutes.filter(route => {
+                const matchesSearch = !searchTerm || 
+                    route.name.toLowerCase().includes(searchTerm) ||
+                    route.bus_number.toLowerCase().includes(searchTerm) ||
+                    route.start.toLowerCase().includes(searchTerm) ||
+                    route.end.toLowerCase().includes(searchTerm);
+                
+                const matchesStatus = !statusFilter || route.status === statusFilter;
+                
+                return matchesSearch && matchesStatus;
+            });
+            
+            displayRoutes(filteredRoutes);
+        }
+
+        function sortTable(column) {
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.direction = 'asc';
+            }
+            
+            filteredRoutes.sort((a, b) => {
+                let aVal = a[column];
+                let bVal = b[column];
+                
+                // Handle numeric values
+                if (column === 'stops' || column === 'distance') {
+                    aVal = parseInt(aVal) || 0;
+                    bVal = parseInt(bVal) || 0;
+                }
+                
+                if (currentSort.direction === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+            
+            displayRoutes(filteredRoutes);
+        }
+
+        function getSortIcon(column) {
+            if (currentSort.column !== column) return '↕️';
+            return currentSort.direction === 'asc' ? '↑️' : '↓️';
+        }
+
+        function viewRouteDetails(index) {
+            const route = filteredRoutes[index];
+            alert(`Route Details:\n\nName: ${route.name}\nBus: ${route.bus_number}\nFrom: ${route.start}\nTo: ${route.end}\nDistance: ${route.distance}\nStops: ${route.stops}\nStatus: ${route.status}\nColor: ${route.color}`);
+        }
+
+        function editRoute(index) {
+            const route = filteredRoutes[index];
+            const newName = prompt('Edit route name:', route.name);
+            if (newName && newName !== route.name) {
+                route.name = newName;
+                displayRoutes(filteredRoutes);
+            }
+        }
+
+        function exportData() {
+            const csvContent = [
+                ['Route', 'Bus Number', 'Start', 'End', 'Distance', 'Stops', 'Status', 'First Run'],
+                ...filteredRoutes.map(route => [
+                    route.name,
+                    route.bus_number,
+                    route.start,
+                    route.end,
+                    route.distance,
+                    route.stops,
+                    route.status,
+                    route.first_run
+                ])
+            ].map(row => row.join(',')).join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'routes.csv';
+            a.click();
+        }
+
+        // Load routes when page loads
+        loadRoutes();
+    </script>
+</body>
+</html>
