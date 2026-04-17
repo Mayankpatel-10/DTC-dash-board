@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTC Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="top-bar">
+            <h2>DTC Dashboard</h2>
+            <ul>
+                <li><button onclick="showAlert('Routes')">Routes</button></li>
+                <li><button onclick="showAlert('Schedules')">Schedules</button></li>
+                <li><button onclick="showAlert('Live Tracking')">Live Tracking</button></li>
+                <li><button onclick="showAlert('Reports')">Reports</button></li>
+            </ul>
+        </div>
+        <div class="main-content">
+            <h1>Bus Tracking Overview</h1>
+            <div id="map"></div>
+            <div class="stats">
+                <div class="stat-box">
+                    <h2>Active Buses</h2>
+                    <p id="activeBuses">Loading...</p>
+                </div>
+                <div class="stat-box">
+                    <h2>Alerts</h2>
+                    <p id="alerts">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
